@@ -25,8 +25,8 @@ def _to_numpy(value) -> np.ndarray:
     return np.asarray(value)
 
 
-def read_table_camera(env, sensor_name: str = "table_cam", env_index: int = 0) -> LabCameraFrame:
-    """Pull env-0 RGB-D + intrinsics + ROS pose from a Lab camera sensor."""
+def read_camera(env, sensor_name: str, env_index: int = 0) -> LabCameraFrame:
+    """Pull env RGB-D + intrinsics + ROS pose from a Lab camera sensor."""
     sensors = getattr(env.scene, "sensors", None)
     if sensors is None:
         camera = env.scene[sensor_name]
@@ -56,3 +56,13 @@ def read_table_camera(env, sensor_name: str = "table_cam", env_index: int = 0) -
         pos_w=pos_w.reshape(3),
         quat_w_ros=quat_w_ros.reshape(4),
     )
+
+
+def read_table_camera(env, sensor_name: str = "table_cam", env_index: int = 0) -> LabCameraFrame:
+    """Alias for the fixed table RGB-D camera."""
+    return read_camera(env, sensor_name=sensor_name, env_index=env_index)
+
+
+def read_wrist_camera(env, sensor_name: str = "wrist_cam", env_index: int = 0) -> LabCameraFrame:
+    """Alias for the Franka wrist RGB-D camera."""
+    return read_camera(env, sensor_name=sensor_name, env_index=env_index)

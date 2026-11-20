@@ -55,7 +55,7 @@ _MUG_QUAT = (
 
 @configclass
 class TeleAssistFrankaStackRgbdEnvCfg(FrankaCubeStackEnvCfg):
-    """IK-Rel Franka table scene with a mug and a 480x480 table RGB-D camera."""
+    """IK-Rel Franka table scene with a mug, table RGB-D, and wrist RGB-D cameras."""
 
     def __post_init__(self):
         super().__post_init__()
@@ -135,5 +135,28 @@ class TeleAssistFrankaStackRgbdEnvCfg(FrankaCubeStackEnvCfg):
                 convention="ros",
             ),
         )
+        # Wrist RGB-D parented under the live panda_hand body. The flat Franka USD
+        # nests the hand under Geometry/... — match Lab visuomotor regex so the
+        # camera rides the EE instead of a static sibling prim.
+        self.scene.wrist_cam = CameraCfg(
+            prim_path="{ENV_REGEX_NS}/Robot/(Geometry/.*/)?panda_hand/wrist_cam",
+            update_period=0.0,
+            height=256,
+            width=256,
+            data_types=["rgb", "distance_to_image_plane"],
+            spawn=sim_utils.PinholeCameraCfg(
+                focal_length=24.0,
+                focus_distance=400.0,
+                horizontal_aperture=20.955,
+                clipping_range=(0.02, 2.0),
+            ),
+            # Same ROS offset as Isaac Lab Franka stack visuomotor wrist cam.
+            offset=CameraCfg.OffsetCfg(
+                pos=(0.13, 0.0, -0.15),
+                rot=(0.03701, 0.03701, -0.70614, -0.70614),
+                convention="ros",
+            ),
+        )
         self.num_rerenders_on_reset = 3
         set_isaac_rtx_global_settings(self.scene.table_cam.renderer_cfg, antialiasing_mode="DLAA")
+        set_isaac_rtx_global_settings(self.scene.wrist_cam.renderer_cfg, antialiasing_mode="DLAA")

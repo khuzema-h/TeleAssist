@@ -60,7 +60,7 @@ Focus the Kit viewport window:
 | `P` | Rescan GraspAssistMap |
 | `O` | Toggle orientation snap |
 
-On start (and after `R` / `P`), the table RGB-D camera is scanned. Logs list each object’s center, affordance, grasp quaternion, and point count (mug). Three image panels open on the right of the Kit viewport: **Table Camera** (live RGB), **Affordance Heatmap** (OOAL JET overlay + grasp pixels), and **Table Camera Scan** (grounding boxes).
+On start (and after `R` / `P`), the table RGB-D camera is scanned. Logs list each object’s center, affordance, grasp quaternion, and point count (mug). Four image panels open on the right of the Kit viewport: **Table Camera** (live RGB), **Affordance Heatmap** (OOAL JET overlay + grasp pixels), **Table Camera Scan** (grounding boxes), and **Wrist Camera** (live RGB from `panda_hand/wrist_cam`).
 
 When the EE is within ~20 cm of the object’s grasp region (full strength inside ~8 cm), orientation snap adds a rotational delta toward that grasp quaternion. Distance is to OOAL grasp points (tracked with the live mug pose), not the object center. Log lines: `[TeleAssist] snap check ...` and `[TeleAssist] snap → mug ...`. Press `O` to disable; press `P` after restart so the map (and grasp quat) refresh.
 
@@ -79,7 +79,7 @@ TeleAssist/
     sam.py                       # SAM 2 segment_region
     affordance.py                # OOAL heatmaps (no Tev1)
     geometry_scan.py             # Lab unproject + grasp orientation
-    camera_lab.py                # read table_cam buffers
+    camera_lab.py                # read table_cam / wrist_cam buffers
     catalog.py                   # mug (kitchen phrase; plate removed for now)
     scan.py                      # GraspAssistMap builder
     snap.py                      # orientation snap toward grasp quats
@@ -89,6 +89,6 @@ TeleAssist/
 
 ## Notes
 
-- Lab’s stock cube-stack task is reused as the Franka/table base; TeleAssist swaps the cubes for the kitchen mug USD (plate temporarily omitted) and registers `TeleAssist-Mug-Plate-Franka-IK-Rel-RGBD` with a 480×480 table RGB-D camera.
+- Lab’s stock cube-stack task is reused as the Franka/table base; TeleAssist swaps the cubes for the kitchen mug USD (plate temporarily omitted) and registers `TeleAssist-Mug-Plate-Franka-IK-Rel-RGBD` with a 480×480 table RGB-D camera plus a 256×256 wrist RGB-D camera on `panda_hand`.
 - Scanning loads OWL-ViT, SAM, and optionally OOAL on GPU; SAM is released after each scan to free VRAM.
 - Installing Isaac Lab into `ps_vla` can change shared deps used by other projects in that env.

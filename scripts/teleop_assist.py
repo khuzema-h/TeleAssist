@@ -45,7 +45,7 @@ from isaaclab.envs import ManagerBasedRLEnvCfg
 
 import teleassist.envs  # noqa: F401 — register TeleAssist gym ids
 from isaaclab_tasks.utils import resolve_task_config
-from teleassist.camera_lab import read_table_camera
+from teleassist.camera_lab import read_table_camera, read_wrist_camera
 from teleassist.scan import GraspAssistMap, SceneScanner
 from teleassist.snap import DEFAULT_ACTION_SCALE, apply_snap_to_action, compute_snap
 from teleassist.view import TableCameraWindows
@@ -61,6 +61,7 @@ class AssistState:
     teleoperation_active: bool = True
     snap_enabled: bool = True
     last_rgb: object | None = None
+    last_wrist_rgb: object | None = None
     last_boxes: list[tuple[float, float, float, float]] = field(default_factory=list)
     last_heatmap: object | None = None
     last_grasp_pixels: object | None = None
@@ -73,13 +74,50 @@ def _rtx_rendering_requested(args: argparse.Namespace) -> bool:
     return external_cameras or ("kit" in visualizers) or bool(getattr(args, "xr", False))
 
 
-def _table_cam_prim(env) -> str:
-    camera = env.scene.sensors["table_cam"] if hasattr(env.scene, "sensors") else env.scene["table_cam"]
+def _cam_prim(env, sensor_name: str, fallback: str) -> str:
+    camera = env.scene.sensors[sensor_name] if hasattr(env.scene, "sensors") else env.scene[sensor_name]
     path = getattr(camera, "cfg", None)
     if path is not None and hasattr(path, "prim_path"):
         # Expand the first env namespace used by Lab.
         return str(path.prim_path).replace("{ENV_REGEX_NS}", "/World/envs/env_0")
-    return "/World/envs/env_0/table_cam"
+    return fallback
+
+
+def _table_cam_prim(env) -> str:
+    return _cam_prim(env, "table_cam", "/World/envs/env_0/table_cam")
+
+
+def _wrist_cam_prim(env) -> str:
+    return _cam_prim(env, "wrist_cam", "/World/envs/env_0/Robot/panda_hand/wrist_cam")
+
+
+def _log_wrist_cam_parent(env) -> None:
+    """Confirm wrist_cam is under a moving panda_hand body (not a static sibling)."""
+    try:
+        from pxr import Usd
+
+        import omni.usd
+
+        stage = omni.usd.get_context().get_stage()
+        path = _wrist_cam_prim(env)
+        prim = stage.GetPrimAtPath(path)
+        if not prim.IsValid():
+            # Regex prim_path may resolve to Geometry/.../panda_hand/wrist_cam.
+            for candidate in stage.Traverse():
+                if candidate.GetName() == "wrist_cam":
+                    path = str(candidate.GetPath())
+                    prim = candidate
+                    break
+        parent = str(prim.GetParent().GetPath()) if prim.IsValid() else "?"
+        print(f"[TeleAssist] wrist_cam prim={path} parent={parent}", flush=True)
+        if "panda_hand" not in parent:
+            print(
+                "[TeleAssist] WARNING: wrist_cam is not under panda_hand — "
+                "image will not track the EE",
+                flush=True,
+            )
+    except Exception as error:
+        print(f"[TeleAssist] wrist_cam parent check failed: {error}", flush=True)
 
 
 def _update_camera_ui(view: TableCameraWindows | None, state: AssistState) -> None:
@@ -90,6 +128,7 @@ def _update_camera_ui(view: TableCameraWindows | None, state: AssistState) -> No
         boxes=state.last_boxes or None,
         points_xy=state.last_grasp_pixels,
         heatmap=state.last_heatmap,
+        wrist_rgb=state.last_wrist_rgb,
     )
 
 
@@ -202,6 +241,8 @@ def main() -> None:
     env_cfg.terminations.time_out = None
     if not hasattr(env_cfg.scene, "table_cam"):
         raise RuntimeError("TeleAssist RGB-D task is missing scene.table_cam")
+    if not hasattr(env_cfg.scene, "wrist_cam"):
+        raise RuntimeError("TeleAssist RGB-D task is missing scene.wrist_cam")
 
     # Bring the main Kit viewport close to the table (default eye is far away).
     env_cfg.viewer.eye = (1.6, 1.2, 1.1)
@@ -304,12 +345,18 @@ def main() -> None:
         # Open panels after the env/UI exist. Prefer Kit image windows; OpenCV fallback.
         if not args_cli.disable_external_cameras:
             try:
+                _log_wrist_cam_parent(env)
                 view = TableCameraWindows(
                     resolution=(
                         int(env_cfg.scene.table_cam.width),
                         int(env_cfg.scene.table_cam.height),
                     ),
                     table_camera_prim=_table_cam_prim(env),
+                    wrist_resolution=(
+                        int(env_cfg.scene.wrist_cam.width),
+                        int(env_cfg.scene.wrist_cam.height),
+                    ),
+                    wrist_camera_prim=_wrist_cam_prim(env),
                 )
             except Exception as error:
                 import traceback
@@ -343,13 +390,18 @@ def main() -> None:
                         state.should_rescan = False
                         _run_scan(env, scanner, state, view)
                     elif view is not None and frame_i % 6 == 0:
-                        # Keep the overlay panel alive with a fresh RGB frame + last boxes.
+                        # Keep table panels + wrist live RGB fresh; overlays reuse last scan.
                         try:
                             frame = read_table_camera(env)
                             state.last_rgb = frame.rgb
-                            _update_camera_ui(view, state)
                         except Exception:
                             pass
+                        try:
+                            wrist = read_wrist_camera(env)
+                            state.last_wrist_rgb = wrist.rgb
+                        except Exception:
+                            pass
+                        _update_camera_ui(view, state)
                     frame_i += 1
             except Exception as error:
                 logger.error(f"Error during simulation step: {error}")
