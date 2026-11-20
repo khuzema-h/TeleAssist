@@ -1,6 +1,6 @@
 # TeleAssist
 
-Cartesian teleop assistant for a Franka arm in **Isaac Lab**. The table scene currently has the kitchen **mug** only (plate temporarily removed). Milestone B adds a scene **GraspAssistMap** scan (OWL-ViT + SAM + OOAL + grasp orientation) during teleop. Orientation snap is not active yet.
+Cartesian teleop assistant for a Franka arm in **Isaac Lab**. The table scene currently has the kitchen **mug** only (plate temporarily removed). Milestone B adds a scene **GraspAssistMap** scan (OWL-ViT + SAM + OOAL + grasp orientation) during teleop. Near a scanned object, **orientation snap** blends the EE toward that object’s grasp quaternion (`O` toggles).
 
 ## Prerequisites
 
@@ -58,8 +58,11 @@ Focus the Kit viewport window:
 | `K` | Toggle gripper |
 | `R` | Reset env and rescan |
 | `P` | Rescan GraspAssistMap |
+| `O` | Toggle orientation snap |
 
-On start (and after `R` / `P`), the table RGB-D camera is scanned. Logs list each object’s center, affordance, grasp quaternion, and point count (mug). Three image panels open on the right of the Kit viewport: **Table Camera** (live RGB), **Affordance Heatmap** (OOAL JET overlay + grasp pixels), and **Table Camera Scan** (grounding boxes). Look for `[TeleAssist] Kit panels:` / `seat mug` / `affordance heatmap ready` in the terminal. **Snap-to-grasp orientation is not applied yet.**
+On start (and after `R` / `P`), the table RGB-D camera is scanned. Logs list each object’s center, affordance, grasp quaternion, and point count (mug). Three image panels open on the right of the Kit viewport: **Table Camera** (live RGB), **Affordance Heatmap** (OOAL JET overlay + grasp pixels), and **Table Camera Scan** (grounding boxes).
+
+When the EE is within ~20 cm of the object’s grasp region (full strength inside ~8 cm), orientation snap adds a rotational delta toward that grasp quaternion. Distance is to OOAL grasp points (tracked with the live mug pose), not the object center. Log lines: `[TeleAssist] snap check ...` and `[TeleAssist] snap → mug ...`. Press `O` to disable; press `P` after restart so the map (and grasp quat) refresh.
 
 ## Layout
 
@@ -79,7 +82,9 @@ TeleAssist/
     camera_lab.py                # read table_cam buffers
     catalog.py                   # mug (kitchen phrase; plate removed for now)
     scan.py                      # GraspAssistMap builder
+    snap.py                      # orientation snap toward grasp quats
   tests/test_geometry_scan.py
+  tests/test_snap.py
 ```
 
 ## Notes

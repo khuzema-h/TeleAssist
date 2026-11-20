@@ -41,8 +41,8 @@ class TestGeometryScan(unittest.TestCase):
         depth = np.full((8, 8), 1.0, dtype=np.float64)
         intrinsic = np.array([[100.0, 0.0, 3.5], [0.0, 100.0, 3.5], [0.0, 0.0, 1.0]], dtype=np.float64)
         pos = np.array([0.0, 0.0, 0.5], dtype=np.float64)
-        # Identity ROS camera: optical +Z world
-        quat = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+        # Identity ROS camera (Lab xyzw): optical +Z world
+        quat = np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float64)
         points = unproject_pixels_lab(np.array([[3.5, 3.5]]), depth, intrinsic, pos, quat)
         self.assertEqual(points.shape, (1, 3))
         np.testing.assert_allclose(points[0], [0.0, 0.0, 1.5], atol=1e-6)

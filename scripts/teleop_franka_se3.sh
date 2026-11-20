@@ -45,6 +45,7 @@ echo "  Z/X T/G C/V  rotate roll/pitch/yaw"
 echo "  K            toggle gripper"
 echo "  R            reset environment + rescan"
 echo "  P            rescan GraspAssistMap"
+echo "  O            toggle orientation snap assist"
 echo
 
 # Default to a Kit viewport so teleop is not headless. Pass your own --viz/--visualizer

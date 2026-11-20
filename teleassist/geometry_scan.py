@@ -214,12 +214,18 @@ def unproject_pixels_lab(
     """Unproject image pixels with ROS-convention camera pose into world XYZ.
 
     ROS camera frame: +X right, +Y down, +Z forward (along the optical axis).
+
+    ``cam_quat_w_ros`` is Isaac Lab's camera quaternion in **(x, y, z, w)** order
+    (see ``CameraData.quat_w_ros``).
     """
     height, width = depth.shape[:2]
     k = np.asarray(intrinsic_3x3, dtype=np.float64).reshape(3, 3)
     fx, fy = float(k[0, 0]), float(k[1, 1])
     cx, cy = float(k[0, 2]), float(k[1, 2])
-    rot = quat_wxyz_to_matrix(cam_quat_w_ros)
+    q_xyzw = np.asarray(cam_quat_w_ros, dtype=np.float64).reshape(4)
+    # Convert Lab (x, y, z, w) → (w, x, y, z) for quat_to_matrix.
+    quat_wxyz = np.array([q_xyzw[3], q_xyzw[0], q_xyzw[1], q_xyzw[2]], dtype=np.float64)
+    rot = quat_wxyz_to_matrix(quat_wxyz)
     origin = np.asarray(cam_pos_w, dtype=np.float64).reshape(3)
     points = []
     for u, v in np.asarray(pixels_xy, dtype=np.float64).reshape(-1, 2):

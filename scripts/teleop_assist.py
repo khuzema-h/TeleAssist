@@ -47,6 +47,7 @@ import teleassist.envs  # noqa: F401 — register TeleAssist gym ids
 from isaaclab_tasks.utils import resolve_task_config
 from teleassist.camera_lab import read_table_camera
 from teleassist.scan import GraspAssistMap, SceneScanner
+from teleassist.snap import DEFAULT_ACTION_SCALE, apply_snap_to_action, compute_snap
 from teleassist.view import TableCameraWindows
 
 logger = logging.getLogger(__name__)
@@ -58,10 +59,12 @@ class AssistState:
     should_reset: bool = False
     should_rescan: bool = False
     teleoperation_active: bool = True
+    snap_enabled: bool = True
     last_rgb: object | None = None
     last_boxes: list[tuple[float, float, float, float]] = field(default_factory=list)
     last_heatmap: object | None = None
     last_grasp_pixels: object | None = None
+    last_snap_object: str | None = None
 
 
 def _rtx_rendering_requested(args: argparse.Namespace) -> bool:
@@ -88,6 +91,82 @@ def _update_camera_ui(view: TableCameraWindows | None, state: AssistState) -> No
         points_xy=state.last_grasp_pixels,
         heatmap=state.last_heatmap,
     )
+
+
+def _ee_pose_world(env) -> tuple[object, object]:
+    """Return (position xyz, quaternion xyzw) for the end-effector in world frame."""
+    ee_frame = env.scene["ee_frame"]
+    pos = ee_frame.data.target_pos_w.torch[0, 0, :].detach().cpu().numpy()
+    quat_xyzw = ee_frame.data.target_quat_w.torch[0, 0, :].detach().cpu().numpy()
+    return pos, quat_xyzw
+
+
+def _live_object_centers(env, state: AssistState) -> dict[str, object]:
+    """World positions from spawned rigid bodies when they match catalog ids."""
+    centers: dict[str, object] = {}
+    for object_id in state.map.entries:
+        try:
+            asset = env.scene[object_id]
+        except Exception:
+            continue
+        try:
+            centers[object_id] = asset.data.root_pos_w.torch[0].detach().cpu().numpy()
+        except Exception:
+            continue
+    return centers
+
+
+def _arm_action_scale(env) -> float:
+    try:
+        return float(env.cfg.actions.arm_action.scale)
+    except Exception:
+        return DEFAULT_ACTION_SCALE
+
+
+def _maybe_apply_snap(env, action, state: AssistState, frame_i: int = 0):
+    if not state.snap_enabled:
+        if frame_i % 60 == 0:
+            print("[TeleAssist] snap disabled (press O to enable)", flush=True)
+        return action
+    if not state.map.entries:
+        if frame_i % 60 == 0:
+            print("[TeleAssist] snap idle: GraspAssistMap empty (press P to rescan)", flush=True)
+        return action
+
+    ee_pos, ee_quat = _ee_pose_world(env)
+    live_centers = _live_object_centers(env, state)
+    decision = compute_snap(
+        ee_pos,
+        ee_quat,
+        state.map,
+        live_centers=live_centers,
+        action_scale=_arm_action_scale(env),
+    )
+    if frame_i % 30 == 0:
+        center_note = ""
+        if decision.object_id and decision.object_id in live_centers:
+            c = live_centers[decision.object_id]
+            center_note = f" live=[{c[0]:.2f},{c[1]:.2f},{c[2]:.2f}]"
+        print(
+            f"[TeleAssist] snap check ee=[{ee_pos[0]:.2f},{ee_pos[1]:.2f},{ee_pos[2]:.2f}] "
+            f"near={decision.object_id or '-'} dist={decision.distance:.3f} m "
+            f"weight={decision.weight:.2f}{center_note}",
+            flush=True,
+        )
+    if decision.object_id != state.last_snap_object:
+        if decision.weight > 0.0 and decision.object_id is not None:
+            print(
+                f"[TeleAssist] snap → {decision.object_id} "
+                f"(dist={decision.distance:.3f} m weight={decision.weight:.2f})",
+                flush=True,
+            )
+        elif state.last_snap_object is not None:
+            print(f"[TeleAssist] snap off ({state.last_snap_object})", flush=True)
+        state.last_snap_object = decision.object_id if decision.weight > 0.0 else None
+    if decision.weight <= 0.0:
+        return action
+    snapped = apply_snap_to_action(action.detach().cpu().numpy(), decision)
+    return torch.as_tensor(snapped, dtype=action.dtype, device=action.device)
 
 
 def _run_scan(env, scanner: SceneScanner, state: AssistState, view: TableCameraWindows | None) -> None:
@@ -154,10 +233,19 @@ def main() -> None:
             state.should_rescan = True
             print("[TeleAssist] rescan requested", flush=True)
 
+        def toggle_snap() -> None:
+            state.snap_enabled = not state.snap_enabled
+            state.last_snap_object = None
+            print(
+                f"[TeleAssist] orientation snap {'ON' if state.snap_enabled else 'OFF'}",
+                flush=True,
+            )
+
         callbacks: dict[str, Callable[[], None]] = {
             "R": request_reset,
             "RESET": request_reset,
             "P": request_rescan,
+            "O": toggle_snap,
         }
 
         device_name = args_cli.teleop_device
@@ -183,9 +271,11 @@ def main() -> None:
 
         print(f"Using teleop device: {teleop_interface}", flush=True)
         print(
-            "TeleAssist keys: WASD/QE move, ZX/TG/CV rotate, K gripper, R reset+rescan, P rescan",
+            "TeleAssist keys: WASD/QE move, ZX/TG/CV rotate, K gripper, "
+            "R reset+rescan, P rescan, O toggle orientation snap",
             flush=True,
         )
+        print("[TeleAssist] orientation snap ON (near scanned objects)", flush=True)
 
         def _seat_mug_after_mesh_ready() -> None:
             # Reset-time USD bounds are often empty; seat once meshes have extents,
@@ -236,6 +326,7 @@ def main() -> None:
                 with torch.inference_mode():
                     action = teleop_interface.advance()
                     if state.teleoperation_active and action is not None:
+                        action = _maybe_apply_snap(env, action, state, frame_i=frame_i)
                         env.step(action.repeat(env.num_envs, 1))
                     else:
                         env.sim.render()
