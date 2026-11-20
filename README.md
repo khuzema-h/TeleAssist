@@ -1,31 +1,25 @@
 # TeleAssist
 
-Cartesian teleop assistant for a Franka arm in **Isaac Lab**. Milestone A is SE(3) keyboard teleop only; grasp snap-assist comes later.
+Cartesian teleop assistant for a Franka arm in **Isaac Lab**. Milestone B adds a scene **GraspAssistMap** scan (OWL-ViT + SAM + OOAL + grasp orientation) during teleop. Orientation snap is not active yet.
 
 ## Prerequisites
 
-- Conda env `ps_vla` with pip Isaac Sim 6.2 and Isaac Lab 3.0 installed
-- Isaac Lab checkout at `~/IsaacLab` (`release/3.0.0`), or set `ISAACLAB_PATH`
-- Accept the Omniverse EULA (this repo’s launchers set `OMNI_KIT_ACCEPT_EULA=YES`)
-
-### Install Isaac Lab into `ps_vla` (one-time)
+- Conda env `ps_vla` with pip Isaac Sim 6.2 and Isaac Lab 3.0 (`~/IsaacLab`, `release/3.0.0`)
+- SAM 2 installed and checkpoint at `../checkpoints/sam2_hiera_base_plus.pt` (or `TELEASSIST_SAM_CKPT`)
+- OOAL checkout at `../OOAL` and weights at `../checkpoints/ooal-models/seen_best` (or `TELEASSIST_OOAL_ROOT`)
+- `transformers>=4.46,<5` for OWL-ViT (pin if Lab upgraded transformers to 5.x)
 
 ```bash
-git clone git@github.com:isaac-sim/IsaacLab.git --branch release/3.0.0 ~/IsaacLab
 conda activate ps_vla
-cd ~/IsaacLab
-./isaaclab.sh -i
+cd /path/to/TeleAssist
+pip install -e .
+# if needed:
+pip install 'transformers>=4.46,<5'
 ```
 
-Smoke-test Kit:
+Accept the Omniverse EULA (launchers set `OMNI_KIT_ACCEPT_EULA=YES`).
 
-```bash
-export OMNI_KIT_ACCEPT_EULA=YES
-export ISAACLAB_PATH=~/IsaacLab
-./scripts/verify_lab_kit.sh
-```
-
-## Run Franka SE(3) keyboard teleop
+## Run Franka SE(3) teleop + scan
 
 ```bash
 conda activate ps_vla
@@ -35,22 +29,23 @@ cd /path/to/TeleAssist
 ./scripts/teleop_franka_se3.sh
 ```
 
+The launcher defaults to `--viz kit` (GUI). Pass another `--viz` / `--visualizer` only if you intentionally want a different viewer.
+
 Defaults:
 
 | Variable | Default |
 | --- | --- |
 | `ISAACLAB_PATH` | `~/IsaacLab` |
-| `TASK` | `IsaacContrib-Stack-Cube-Franka-IK-Rel` |
+| `TASK` | `TeleAssist-Stack-Cube-Franka-IK-Rel-RGBD` |
 | `TELEOP_DEVICE` | `keyboard` |
-| `NUM_ENVS` | `1` |
+| `TELEASSIST_SAM_CKPT` | `../checkpoints/sam2_hiera_base_plus.pt` |
+| `TELEASSIST_OOAL_ROOT` | `../OOAL` |
 
-Extra flags are forwarded to Isaac Lab’s teleop agent (for example `--viz kit`).
-
-The launcher prepends `site-packages/nvidia/cu13/lib` to `LD_LIBRARY_PATH` so Torch CUDA 13 can find `libnvrtc-builtins.so.13.0`.
+The launcher prepends `site-packages/nvidia/cu13/lib` to `LD_LIBRARY_PATH` for Torch CUDA 13 NVRTC.
 
 ### Keyboard bindings
 
-Focus the Kit viewport window, then:
+Focus the Kit viewport window:
 
 | Keys | Action |
 | --- | --- |
@@ -61,19 +56,34 @@ Focus the Kit viewport window, then:
 | `T` / `G` | Rotate pitch |
 | `C` / `V` | Rotate yaw |
 | `K` | Toggle gripper |
-| `R` | Reset teleop commands |
+| `R` | Reset env and rescan |
+| `P` | Rescan GraspAssistMap |
+
+On start (and after `R` / `P`), the table RGB-D camera is scanned. Logs list each cube’s center, affordance, grasp quaternion, and point count. Two image panels open: **Table Camera** (live RGB) and **Table Camera Scan** (boxes overlay), docked on the right of the Kit viewport (or floating / OpenCV if docking fails). Look for `[TeleAssist] Kit panels:` / `docked camera panels` in the terminal. **Snap-to-grasp orientation is not applied yet.**
 
 ## Layout
 
 ```
 TeleAssist/
   README.md
-  scripts/teleop_franka_se3.sh   # Franka IK-Rel keyboard launcher
-  scripts/verify_lab_kit.py      # Short Kit smoke test
-  teleassist/                    # Package stub for later snap-assist code
+  pyproject.toml
+  scripts/teleop_franka_se3.sh   # launcher
+  scripts/teleop_assist.py       # teleop + scan loop
+  scripts/verify_lab_kit.sh      # Kit smoke test
+  teleassist/
+    envs/                        # RGB-D Franka IK-Rel gym task
+    grounding.py                 # OWL-ViT + color boxes
+    sam.py                       # SAM 2 segment_region
+    affordance.py                # OOAL heatmaps (no Tev1)
+    geometry_scan.py             # Lab unproject + grasp orientation
+    camera_lab.py                # read table_cam buffers
+    catalog.py                   # red/green/blue stack cubes
+    scan.py                      # GraspAssistMap builder
+  tests/test_geometry_scan.py
 ```
 
 ## Notes
 
-- Lab 3.0 registers the relative-IK stack task as `IsaacContrib-Stack-Cube-Franka-IK-Rel` (not the older `Isaac-Stack-Cube-Franka-IK-Rel-v0` name).
-- Installing Isaac Lab into `ps_vla` can change shared deps (PyTorch CUDA build, `transformers`, etc.) used by other projects in that env.
+- Lab’s stock `IsaacContrib-Stack-Cube-Franka-IK-Rel` has no cameras; TeleAssist registers `TeleAssist-Stack-Cube-Franka-IK-Rel-RGBD` with a 480×480 table RGB-D camera.
+- Scanning loads OWL-ViT, SAM, and optionally OOAL on GPU; SAM is released after each scan to free VRAM.
+- Installing Isaac Lab into `ps_vla` can change shared deps used by other projects in that env.

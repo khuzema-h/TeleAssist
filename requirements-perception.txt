@@ -1,0 +1,6 @@
+# Perception extras for TeleAssist scanning (install into ps_vla).
+# SAM 2 must be installed separately (editable segment-anything-2 checkout).
+# OOAL is a local checkout pointed at by TELEASSIST_OOAL_ROOT.
+opencv-python-headless
+Pillow
+transformers>=4.46,<5

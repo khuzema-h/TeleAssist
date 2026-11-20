@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Launch Franka SE(3) keyboard teleop via Isaac Lab.
+# Launch TeleAssist Franka SE(3) teleop with GraspAssistMap scanning.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ISAACLAB_PATH="${ISAACLAB_PATH:-${HOME}/IsaacLab}"
-TASK="${TASK:-IsaacContrib-Stack-Cube-Franka-IK-Rel}"
+TASK="${TASK:-TeleAssist-Stack-Cube-Franka-IK-Rel-RGBD}"
 TELEOP_DEVICE="${TELEOP_DEVICE:-keyboard}"
 NUM_ENVS="${NUM_ENVS:-1}"
 
@@ -20,6 +20,7 @@ if [[ ! -x "${ISAACLAB_PATH}/isaaclab.sh" ]]; then
 fi
 
 export OMNI_KIT_ACCEPT_EULA="${OMNI_KIT_ACCEPT_EULA:-YES}"
+export PYTHONPATH="${ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
 # Torch cu130 needs NVIDIA CUDA 13 NVRTC builtins on the dynamic loader path.
 _PY_SITE="$(python -c 'import site; print(site.getsitepackages()[0])')"
@@ -28,7 +29,11 @@ if [[ -d "${_CU13_LIB}" ]]; then
   export LD_LIBRARY_PATH="${_CU13_LIB}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 fi
 
-echo "TeleAssist Franka SE(3) teleop"
+# Perception assets live next to TeleAssist inside the pseudo-vla checkout by default.
+export TELEASSIST_SAM_CKPT="${TELEASSIST_SAM_CKPT:-${ROOT}/../checkpoints/sam2_hiera_base_plus.pt}"
+export TELEASSIST_OOAL_ROOT="${TELEASSIST_OOAL_ROOT:-${ROOT}/../OOAL}"
+
+echo "TeleAssist Franka SE(3) teleop + scan"
 echo "  ISAACLAB_PATH=${ISAACLAB_PATH}"
 echo "  task=${TASK}"
 echo "  device=${TELEOP_DEVICE}"
@@ -38,12 +43,26 @@ echo "Keyboard (focus the Kit window):"
 echo "  W/S A/D Q/E  translate X/Y/Z"
 echo "  Z/X T/G C/V  rotate roll/pitch/yaw"
 echo "  K            toggle gripper"
-echo "  R            reset commands"
+echo "  R            reset environment + rescan"
+echo "  P            rescan GraspAssistMap"
 echo
 
+# Default to a Kit viewport so teleop is not headless. Pass your own --viz/--visualizer
+# to override (e.g. omit GUI intentionally).
+EXTRA_ARGS=("$@")
+HAS_VIZ=0
+for arg in "${EXTRA_ARGS[@]}"; do
+  case "${arg}" in
+    --viz|--viz=*|--visualizer|--visualizer=*) HAS_VIZ=1 ;;
+  esac
+done
+if [[ "${HAS_VIZ}" -eq 0 ]]; then
+  EXTRA_ARGS=(--viz kit "${EXTRA_ARGS[@]}")
+fi
+
 cd "${ISAACLAB_PATH}"
-exec ./isaaclab.sh -p scripts/environments/teleoperation/teleop_se3_agent.py \
+exec ./isaaclab.sh -p "${ROOT}/scripts/teleop_assist.py" \
   --task "${TASK}" \
   --num_envs "${NUM_ENVS}" \
   --teleop_device "${TELEOP_DEVICE}" \
-  "$@"
+  "${EXTRA_ARGS[@]}"
