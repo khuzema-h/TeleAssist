@@ -4,7 +4,7 @@
 
 ![TeleAssist orientation-snap demo](teleassist/assets/teleassist_demo.gif)
 
-[Full demo (WebM)](teleassist/assets/teleassist_demo.webm) — orientation snap toward the mug grasp region during SE(3) teleop.
+[Full demo](teleassist/assets/teleassist_demo.webm) — orientation snap toward the mug grasp region during SE(3) teleop.
 
 ## Abstract
 
