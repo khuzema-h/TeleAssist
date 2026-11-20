@@ -2,6 +2,10 @@
 
 **A perception-guided Cartesian teleoperation assistant for a Franka arm in Isaac Lab**
 
+<video src="teleassist/assets/teleassist_demo.mp4" controls width="720" title="TeleAssist orientation-snap demo">
+  <a href="teleassist/assets/teleassist_demo.mp4">Demo video</a> — orientation snap toward the mug grasp region during SE(3) teleop.
+</video>
+
 ## Abstract
 
 Human teleoperation is often treated as pure joystick control: the operator supplies every translation and rotation, and the robot simply tracks the commanded end-effector motion. This package explores a lighter alternative for tabletop grasping: keep the human in the loop for motion, but assist orientation near objects using a scanned scene model. TeleAssist runs in NVIDIA Isaac Lab with a Franka arm and parallel gripper. On start (and on demand), it builds a **GraspAssistMap** from the table RGB-D camera using OWL-ViT grounding, Segment Anything 2 (SAM 2) masks, OOAL affordance heatmaps, and RGB-D grasp geometry. While the operator teleops with relative SE(3) keyboard control, **orientation snap** blends the end-effector toward each object’s estimated grasp quaternion when the hand approaches the grasp region, and restores the pre-snap orientation when the hand leaves.
