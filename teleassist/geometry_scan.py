@@ -9,7 +9,7 @@ import numpy as np
 DEPTH_RANGE = (0.05, 3.0)
 STANDOFF_Z = 0.10
 TOP_DOWN_WXYZ = np.array([0.0, 1.0, 0.0, 0.0], dtype=np.float64)
-SIDE_GRASP_TILT_DEG = 15.0
+SIDE_GRASP_TILT_DEG = 0.0
 
 
 @dataclass
