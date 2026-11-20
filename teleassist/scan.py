@@ -6,7 +6,10 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from teleassist.affordance import affordance_status, grasp_region_points
+from teleassist.affordance import (
+    affordance_status,
+    region_points_from_heatmap,
+)
 from teleassist.camera_lab import LabCameraFrame
 from teleassist.catalog import STACK_CUBE_SPECS, object_id, object_phrase
 from teleassist.geometry_scan import (
@@ -36,6 +39,9 @@ class GraspAssistEntry:
 @dataclass
 class GraspAssistMap:
     entries: dict[str, GraspAssistEntry] = field(default_factory=dict)
+    # Full-frame OOAL affordance heatmap (H, W), max-composited over objects.
+    heatmap: np.ndarray | None = None
+    grasp_pixels_xy: np.ndarray | None = None
 
     def summary_lines(self) -> list[str]:
         lines = []
@@ -49,6 +55,21 @@ class GraspAssistMap:
         return lines
 
 
+def _paste_heatmap(
+    canvas: np.ndarray,
+    crop: np.ndarray,
+    y0: int,
+    x0: int,
+) -> None:
+    y1 = min(canvas.shape[0], y0 + crop.shape[0])
+    x1 = min(canvas.shape[1], x0 + crop.shape[1])
+    if y1 <= y0 or x1 <= x0:
+        return
+    region = canvas[y0:y1, x0:x1]
+    patch = crop[: y1 - y0, : x1 - x0]
+    np.maximum(region, patch, out=region)
+
+
 class SceneScanner:
     """OWL-ViT + SAM + OOAL scan pipeline for TeleAssist."""
 
@@ -57,12 +78,23 @@ class SceneScanner:
         self.segmenter = SamSegmenter()
 
     def scan_frame(self, frame: LabCameraFrame, say=print) -> GraspAssistMap:
+        from teleassist.affordance import affordance_heatmap
+
         rgb = frame.rgb
         depth = frame.depth
         assist = GraspAssistMap()
         if rgb.size == 0 or depth.size == 0:
             say("table camera has no RGB-D frame")
             return assist
+
+        height, width = rgb.shape[:2]
+        heatmap = np.zeros((height, width), dtype=np.float32)
+        grasp_pixels: list[np.ndarray] = []
+
+        # Scene-wide pick_up prior (full frame), then per-object crops refine it.
+        scene_heat = affordance_heatmap(rgb, "pick_up")
+        if scene_heat is not None:
+            heatmap = np.maximum(heatmap, scene_heat.astype(np.float32))
 
         requests = [(object_id(spec), spec, object_phrase(spec)) for spec in STACK_CUBE_SPECS]
         located = self.grounder.ground_all(rgb, [phrase for _, _, phrase in requests])
@@ -89,7 +121,21 @@ class SceneScanner:
 
             affordance = str(spec.get("affordance") or "pick_up")
             grasp_style = str(spec.get("grasp_style") or "auto")
-            region_xy = grasp_region_points(rgb, mask, affordance)
+
+            ys, xs = np.where(mask)
+            pad = 8
+            y0 = max(0, int(ys.min()) - pad)
+            y1 = min(height, int(ys.max()) + pad + 1)
+            x0 = max(0, int(xs.min()) - pad)
+            x1 = min(width, int(xs.max()) + pad + 1)
+            crop_heat = affordance_heatmap(rgb[y0:y1, x0:x1], affordance)
+            if crop_heat is not None:
+                _paste_heatmap(heatmap, crop_heat.astype(np.float32), y0, x0)
+                region_xy = region_points_from_heatmap(
+                    mask[y0:y1, x0:x1], crop_heat, count=16, origin=(x0, y0)
+                )
+            else:
+                region_xy = None
             if region_xy is None:
                 say(f"scan {obj_id}: no OOAL region for {affordance}; using full mask samples")
                 affordance_used = None
@@ -98,6 +144,7 @@ class SceneScanner:
                 affordance_used = affordance
                 grasp_xy = region_xy
                 say(f"scan {obj_id}: OOAL {affordance} seeded {len(grasp_xy)} grasp pixels")
+            grasp_pixels.append(np.asarray(grasp_xy, dtype=np.float64).reshape(-1, 2))
 
             grasp_points = unproject_pixels_lab(
                 grasp_xy, depth, frame.intrinsic, frame.pos_w, frame.quat_w_ros
@@ -123,6 +170,15 @@ class SceneScanner:
                 f"top_z={top_z:.3f}"
             )
 
+        if float(np.nanmax(heatmap)) > 0:
+            assist.heatmap = heatmap
+        if grasp_pixels:
+            assist.grasp_pixels_xy = np.concatenate(grasp_pixels, axis=0)
+
         self.segmenter.release_sam()
         say(f"OOAL status: {affordance_status()}")
+        if assist.heatmap is not None:
+            say(f"affordance heatmap ready peak={float(np.nanmax(assist.heatmap)):.3f}")
+        else:
+            say("affordance heatmap empty (OOAL unavailable)")
         return assist

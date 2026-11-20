@@ -60,6 +60,8 @@ class AssistState:
     teleoperation_active: bool = True
     last_rgb: object | None = None
     last_boxes: list[tuple[float, float, float, float]] = field(default_factory=list)
+    last_heatmap: object | None = None
+    last_grasp_pixels: object | None = None
 
 
 def _rtx_rendering_requested(args: argparse.Namespace) -> bool:
@@ -80,7 +82,12 @@ def _table_cam_prim(env) -> str:
 def _update_camera_ui(view: TableCameraWindows | None, state: AssistState) -> None:
     if view is None or state.last_rgb is None:
         return
-    view.update(state.last_rgb, boxes=state.last_boxes or None)
+    view.update(
+        state.last_rgb,
+        boxes=state.last_boxes or None,
+        points_xy=state.last_grasp_pixels,
+        heatmap=state.last_heatmap,
+    )
 
 
 def _run_scan(env, scanner: SceneScanner, state: AssistState, view: TableCameraWindows | None) -> None:
@@ -94,6 +101,8 @@ def _run_scan(env, scanner: SceneScanner, state: AssistState, view: TableCameraW
     state.map = scanner.scan_frame(frame, say=lambda msg: print(f"[TeleAssist] {msg}", flush=True))
     state.last_rgb = frame.rgb
     state.last_boxes = [entry.box for entry in state.map.entries.values()]
+    state.last_heatmap = state.map.heatmap
+    state.last_grasp_pixels = state.map.grasp_pixels_xy
     lines = state.map.summary_lines()
     if not lines:
         print("[TeleAssist] GraspAssistMap is empty", flush=True)

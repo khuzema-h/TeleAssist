@@ -59,7 +59,7 @@ Focus the Kit viewport window:
 | `R` | Reset env and rescan |
 | `P` | Rescan GraspAssistMap |
 
-On start (and after `R` / `P`), the table RGB-D camera is scanned. Logs list each cube’s center, affordance, grasp quaternion, and point count. Two image panels open: **Table Camera** (live RGB) and **Table Camera Scan** (boxes overlay), docked on the right of the Kit viewport (or floating / OpenCV if docking fails). Look for `[TeleAssist] Kit panels:` / `docked camera panels` in the terminal. **Snap-to-grasp orientation is not applied yet.**
+On start (and after `R` / `P`), the table RGB-D camera is scanned. Logs list each cube’s center, affordance, grasp quaternion, and point count. Three image panels open on the right of the Kit viewport: **Table Camera** (live RGB), **Affordance Heatmap** (OOAL JET overlay + grasp pixels), and **Table Camera Scan** (grounding boxes). Look for `[TeleAssist] Kit panels:` / `affordance heatmap ready` in the terminal. **Snap-to-grasp orientation is not applied yet.**
 
 ## Layout
 
