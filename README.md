@@ -62,7 +62,7 @@ Focus the Kit viewport window:
 
 On start (and after `R` / `P`), the table RGB-D camera is scanned. Logs list each object’s center, affordance, grasp quaternion, and point count (mug). Four image panels open on the right of the Kit viewport: **Table Camera** (live RGB), **Affordance Heatmap** (OOAL JET overlay + grasp pixels), **Table Camera Scan** (grounding boxes), and **Wrist Camera** (live RGB from `panda_hand/wrist_cam`).
 
-When the EE is within ~20 cm of the object’s grasp region (full strength inside ~8 cm), orientation snap adds a rotational delta toward that grasp quaternion. Distance is to OOAL grasp points (tracked with the live mug pose), not the object center. Log lines: `[TeleAssist] snap check ...` and `[TeleAssist] snap → mug ...`. Press `O` to disable; press `P` after restart so the map (and grasp quat) refresh.
+When the EE is within ~30 cm of the object’s grasp region (full strength inside ~12 cm), orientation snap blends toward that grasp quaternion. Leaving the zone restores the EE orientation captured when snap engaged. Distance is to OOAL grasp points (tracked with the live mug pose). Log lines: `[TeleAssist] snap → ...` / `snap restore → ...`. Press `O` to disable; press `P` after restart so the map (and grasp quat) refresh.
 
 ## Layout
 

@@ -47,7 +47,7 @@ import teleassist.envs  # noqa: F401 — register TeleAssist gym ids
 from isaaclab_tasks.utils import resolve_task_config
 from teleassist.camera_lab import read_table_camera, read_wrist_camera
 from teleassist.scan import GraspAssistMap, SceneScanner
-from teleassist.snap import DEFAULT_ACTION_SCALE, apply_snap_to_action, compute_snap
+from teleassist.snap import DEFAULT_ACTION_SCALE, SnapMemory, apply_snap_to_action, compute_snap
 from teleassist.view import TableCameraWindows
 
 logger = logging.getLogger(__name__)
@@ -66,6 +66,8 @@ class AssistState:
     last_heatmap: object | None = None
     last_grasp_pixels: object | None = None
     last_snap_object: str | None = None
+    last_snap_mode: str = "idle"
+    snap_memory: SnapMemory = field(default_factory=SnapMemory)
 
 
 def _rtx_rendering_requested(args: argparse.Namespace) -> bool:
@@ -164,6 +166,8 @@ def _arm_action_scale(env) -> float:
 
 def _maybe_apply_snap(env, action, state: AssistState, frame_i: int = 0):
     if not state.snap_enabled:
+        if state.snap_memory.baseline_quat_xyzw is not None:
+            state.snap_memory.clear()
         if frame_i % 60 == 0:
             print("[TeleAssist] snap disabled (press O to enable)", flush=True)
         return action
@@ -178,6 +182,7 @@ def _maybe_apply_snap(env, action, state: AssistState, frame_i: int = 0):
         ee_pos,
         ee_quat,
         state.map,
+        memory=state.snap_memory,
         live_centers=live_centers,
         action_scale=_arm_action_scale(env),
     )
@@ -189,19 +194,26 @@ def _maybe_apply_snap(env, action, state: AssistState, frame_i: int = 0):
         print(
             f"[TeleAssist] snap check ee=[{ee_pos[0]:.2f},{ee_pos[1]:.2f},{ee_pos[2]:.2f}] "
             f"near={decision.object_id or '-'} dist={decision.distance:.3f} m "
-            f"weight={decision.weight:.2f}{center_note}",
+            f"weight={decision.weight:.2f} mode={decision.mode}{center_note}",
             flush=True,
         )
-    if decision.object_id != state.last_snap_object:
-        if decision.weight > 0.0 and decision.object_id is not None:
+    if decision.mode != state.last_snap_mode or decision.object_id != state.last_snap_object:
+        if decision.mode == "snap" and decision.object_id is not None:
             print(
                 f"[TeleAssist] snap → {decision.object_id} "
                 f"(dist={decision.distance:.3f} m weight={decision.weight:.2f})",
                 flush=True,
             )
-        elif state.last_snap_object is not None:
-            print(f"[TeleAssist] snap off ({state.last_snap_object})", flush=True)
-        state.last_snap_object = decision.object_id if decision.weight > 0.0 else None
+        elif decision.mode == "restore":
+            print(
+                f"[TeleAssist] snap restore → pre-snap orientation "
+                f"({decision.object_id or 'object'})",
+                flush=True,
+            )
+        elif state.last_snap_mode in ("snap", "restore"):
+            print(f"[TeleAssist] snap idle ({state.last_snap_object or '-'})", flush=True)
+        state.last_snap_mode = decision.mode
+        state.last_snap_object = decision.object_id if decision.mode != "idle" else None
     if decision.weight <= 0.0:
         return action
     snapped = apply_snap_to_action(action.detach().cpu().numpy(), decision)
@@ -277,6 +289,8 @@ def main() -> None:
         def toggle_snap() -> None:
             state.snap_enabled = not state.snap_enabled
             state.last_snap_object = None
+            state.last_snap_mode = "idle"
+            state.snap_memory.clear()
             print(
                 f"[TeleAssist] orientation snap {'ON' if state.snap_enabled else 'OFF'}",
                 flush=True,

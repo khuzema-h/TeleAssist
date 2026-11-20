@@ -6,10 +6,12 @@ import numpy as np
 
 from teleassist.scan import GraspAssistEntry, GraspAssistMap
 from teleassist.snap import (
+    SnapMemory,
     apply_snap_to_action,
     compute_snap,
     nearest_entry,
     quat_error_axis_angle_xyzw,
+    quat_slerp_xyzw,
     snap_weight,
     wxyz_to_xyzw,
 )
@@ -35,9 +37,9 @@ def test_wxyz_to_xyzw():
 
 
 def test_snap_weight_falloff():
-    assert snap_weight(0.05) == 1.0
-    assert snap_weight(0.25) == 0.0
-    mid = snap_weight(0.14)
+    assert snap_weight(0.10) == 1.0
+    assert snap_weight(0.35) == 0.0
+    mid = snap_weight(0.20)
     assert 0.0 < mid < 1.0
 
 
@@ -80,16 +82,20 @@ def test_compute_snap_and_apply():
     assist = GraspAssistMap(
         entries={"mug": _entry("mug", [0.5, 0.0, 0.05], [0.0, 1.0, 0.0, 0.0])}  # 180° about X in wxyz
     )
+    memory = SnapMemory()
     # EE at object, identity orientation → should snap hard.
     decision = compute_snap(
         ee_pos_w=np.array([0.5, 0.0, 0.05]),
         ee_quat_xyzw=np.array([0.0, 0.0, 0.0, 1.0]),
         assist_map=assist,
+        memory=memory,
         action_scale=0.5,
     )
     assert decision.object_id == "mug"
+    assert decision.mode == "snap"
     assert decision.weight == 1.0
     assert float(np.linalg.norm(decision.rot_delta)) > 0.0
+    assert memory.baseline_quat_xyzw is not None
 
     action = np.array([0.01, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
     out = apply_snap_to_action(action, decision)
@@ -106,4 +112,55 @@ def test_compute_snap_out_of_range():
         assist_map=assist,
     )
     assert decision.weight == 0.0
+    assert decision.mode == "idle"
     assert np.allclose(decision.rot_delta, 0.0)
+
+
+def test_quat_slerp_endpoints():
+    a = np.array([0.0, 0.0, 0.0, 1.0])
+    b = np.array([0.0, 0.0, np.sin(np.pi / 4), np.cos(np.pi / 4)])
+    assert np.allclose(quat_slerp_xyzw(a, b, 0.0), a, atol=1e-6)
+    assert np.allclose(quat_slerp_xyzw(a, b, 1.0), b, atol=1e-6)
+
+
+def test_leave_zone_restores_baseline():
+    assist = GraspAssistMap(
+        entries={"mug": _entry("mug", [0.5, 0.0, 0.05], [0.0, 1.0, 0.0, 0.0])}
+    )
+    memory = SnapMemory()
+    baseline = np.array([0.0, 0.0, 0.0, 1.0])
+    # Enter snap near the mug.
+    near = compute_snap(
+        ee_pos_w=np.array([0.5, 0.0, 0.05]),
+        ee_quat_xyzw=baseline,
+        assist_map=assist,
+        memory=memory,
+        action_scale=0.5,
+    )
+    assert near.mode == "snap"
+    assert memory.baseline_quat_xyzw is not None
+
+    # Leave while still at a snapped orientation → restore toward baseline.
+    snapped_quat = np.array([1.0, 0.0, 0.0, 0.0])  # 180° about X (xyzw)
+    far = compute_snap(
+        ee_pos_w=np.array([1.5, 0.0, 0.05]),
+        ee_quat_xyzw=snapped_quat,
+        assist_map=assist,
+        memory=memory,
+        action_scale=0.5,
+    )
+    assert far.mode == "restore"
+    assert far.weight == 1.0
+    assert float(np.linalg.norm(far.rot_delta)) > 0.0
+
+    # Already back at baseline → idle and clear memory.
+    done = compute_snap(
+        ee_pos_w=np.array([1.5, 0.0, 0.05]),
+        ee_quat_xyzw=baseline,
+        assist_map=assist,
+        memory=memory,
+        action_scale=0.5,
+    )
+    assert done.mode == "idle"
+    assert done.weight == 0.0
+    assert memory.baseline_quat_xyzw is None
