@@ -1,0 +1,69 @@
+#usda 1.0
+(
+    defaultPrim = "Drawer"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "Drawer" (
+    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+)
+{
+    float physics:mass = 0.9
+
+    def Cube "body" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        color3f[] primvars:displayColor = [(0.45, 0.3, 0.16)]
+        double size = 1
+        float3 xformOp:scale = (0.24, 0.18, 0.08)
+        double3 xformOp:translate = (0, 0, 0.04)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+    }
+
+    def Cube "front_panel" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        color3f[] primvars:displayColor = [(0.5, 0.35, 0.21)]
+        double size = 1
+        float3 xformOp:scale = (0.02, 0.18, 0.08)
+        double3 xformOp:translate = (-0.13, 0, 0.04)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+    }
+
+    def Cube "handle_bar" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        color3f[] primvars:displayColor = [(0.72, 0.74, 0.76)]
+        double size = 1
+        float3 xformOp:scale = (0.015, 0.1, 0.015)
+        double3 xformOp:translate = (-0.155, 0, 0.04)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+    }
+
+    def Cube "handle_post_l" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        color3f[] primvars:displayColor = [(0.72, 0.74, 0.76)]
+        double size = 1
+        float3 xformOp:scale = (0.02, 0.012, 0.012)
+        double3 xformOp:translate = (-0.145, -0.04, 0.04)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+    }
+
+    def Cube "handle_post_r" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        color3f[] primvars:displayColor = [(0.72, 0.74, 0.76)]
+        double size = 1
+        float3 xformOp:scale = (0.02, 0.012, 0.012)
+        double3 xformOp:translate = (-0.145, 0.04, 0.04)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+    }
+}
+

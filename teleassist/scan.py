@@ -11,7 +11,7 @@ from teleassist.affordance import (
     region_points_from_heatmap,
 )
 from teleassist.camera_lab import LabCameraFrame
-from teleassist.catalog import STACK_CUBE_SPECS, object_id, object_phrase
+from teleassist.catalog import TABLE_OBJECT_SPECS, object_id, object_phrase
 from teleassist.geometry_scan import (
     adaptive_grasp_orientation,
     mask_depth_points_lab,
@@ -91,12 +91,13 @@ class SceneScanner:
         heatmap = np.zeros((height, width), dtype=np.float32)
         grasp_pixels: list[np.ndarray] = []
 
-        # Scene-wide pick_up prior (full frame), then per-object crops refine it.
-        scene_heat = affordance_heatmap(rgb, "pick_up")
-        if scene_heat is not None:
-            heatmap = np.maximum(heatmap, scene_heat.astype(np.float32))
+        requests = [(object_id(spec), spec, object_phrase(spec)) for spec in TABLE_OBJECT_SPECS]
+        # Scene-wide priors for catalog affordances, then per-object crops.
+        for affordance_name in {str(spec.get("affordance") or "pick_up") for _, spec, _ in requests}:
+            scene_heat = affordance_heatmap(rgb, affordance_name)
+            if scene_heat is not None:
+                heatmap = np.maximum(heatmap, scene_heat.astype(np.float32))
 
-        requests = [(object_id(spec), spec, object_phrase(spec)) for spec in STACK_CUBE_SPECS]
         located = self.grounder.ground_all(rgb, [phrase for _, _, phrase in requests])
 
         for obj_id, spec, phrase in requests:
@@ -119,7 +120,7 @@ class SceneScanner:
                 continue
             center, top_z, dims = pose_from_depth_points(cloud)
 
-            affordance = str(spec.get("affordance") or "pick_up")
+            affordance = str(spec.get("affordance") or "hold")
             grasp_style = str(spec.get("grasp_style") or "auto")
 
             ys, xs = np.where(mask)

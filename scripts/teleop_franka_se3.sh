@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ISAACLAB_PATH="${ISAACLAB_PATH:-${HOME}/IsaacLab}"
-TASK="${TASK:-TeleAssist-Stack-Cube-Franka-IK-Rel-RGBD}"
+TASK="${TASK:-TeleAssist-Mug-Plate-Franka-IK-Rel-RGBD}"
 TELEOP_DEVICE="${TELEOP_DEVICE:-keyboard}"
 NUM_ENVS="${NUM_ENVS:-1}"
 

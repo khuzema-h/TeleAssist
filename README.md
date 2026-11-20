@@ -1,6 +1,6 @@
 # TeleAssist
 
-Cartesian teleop assistant for a Franka arm in **Isaac Lab**. Milestone B adds a scene **GraspAssistMap** scan (OWL-ViT + SAM + OOAL + grasp orientation) during teleop. Orientation snap is not active yet.
+Cartesian teleop assistant for a Franka arm in **Isaac Lab**. The table scene currently has the kitchen **mug** only (plate temporarily removed). Milestone B adds a scene **GraspAssistMap** scan (OWL-ViT + SAM + OOAL + grasp orientation) during teleop. Orientation snap is not active yet.
 
 ## Prerequisites
 
@@ -36,7 +36,7 @@ Defaults:
 | Variable | Default |
 | --- | --- |
 | `ISAACLAB_PATH` | `~/IsaacLab` |
-| `TASK` | `TeleAssist-Stack-Cube-Franka-IK-Rel-RGBD` |
+| `TASK` | `TeleAssist-Mug-Plate-Franka-IK-Rel-RGBD` |
 | `TELEOP_DEVICE` | `keyboard` |
 | `TELEASSIST_SAM_CKPT` | `../checkpoints/sam2_hiera_base_plus.pt` |
 | `TELEASSIST_OOAL_ROOT` | `../OOAL` |
@@ -59,7 +59,7 @@ Focus the Kit viewport window:
 | `R` | Reset env and rescan |
 | `P` | Rescan GraspAssistMap |
 
-On start (and after `R` / `P`), the table RGB-D camera is scanned. Logs list each cube’s center, affordance, grasp quaternion, and point count. Three image panels open on the right of the Kit viewport: **Table Camera** (live RGB), **Affordance Heatmap** (OOAL JET overlay + grasp pixels), and **Table Camera Scan** (grounding boxes). Look for `[TeleAssist] Kit panels:` / `affordance heatmap ready` in the terminal. **Snap-to-grasp orientation is not applied yet.**
+On start (and after `R` / `P`), the table RGB-D camera is scanned. Logs list each object’s center, affordance, grasp quaternion, and point count (mug). Three image panels open on the right of the Kit viewport: **Table Camera** (live RGB), **Affordance Heatmap** (OOAL JET overlay + grasp pixels), and **Table Camera Scan** (grounding boxes). Look for `[TeleAssist] Kit panels:` / `seat mug` / `affordance heatmap ready` in the terminal. **Snap-to-grasp orientation is not applied yet.**
 
 ## Layout
 
@@ -77,13 +77,13 @@ TeleAssist/
     affordance.py                # OOAL heatmaps (no Tev1)
     geometry_scan.py             # Lab unproject + grasp orientation
     camera_lab.py                # read table_cam buffers
-    catalog.py                   # red/green/blue stack cubes
+    catalog.py                   # mug (kitchen phrase; plate removed for now)
     scan.py                      # GraspAssistMap builder
   tests/test_geometry_scan.py
 ```
 
 ## Notes
 
-- Lab’s stock `IsaacContrib-Stack-Cube-Franka-IK-Rel` has no cameras; TeleAssist registers `TeleAssist-Stack-Cube-Franka-IK-Rel-RGBD` with a 480×480 table RGB-D camera.
+- Lab’s stock cube-stack task is reused as the Franka/table base; TeleAssist swaps the cubes for the kitchen mug USD (plate temporarily omitted) and registers `TeleAssist-Mug-Plate-Franka-IK-Rel-RGBD` with a 480×480 table RGB-D camera.
 - Scanning loads OWL-ViT, SAM, and optionally OOAL on GPU; SAM is released after each scan to free VRAM.
 - Installing Isaac Lab into `ps_vla` can change shared deps used by other projects in that env.

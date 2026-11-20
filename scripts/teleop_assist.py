@@ -22,7 +22,7 @@ from isaaclab_tasks.utils import setup_preset_cli
 parser = argparse.ArgumentParser(description="TeleAssist Franka SE(3) teleop with scene scan.")
 parser.add_argument("--num_envs", type=int, default=1)
 parser.add_argument("--teleop_device", type=str, default="keyboard")
-parser.add_argument("--task", type=str, default="TeleAssist-Stack-Cube-Franka-IK-Rel-RGBD")
+parser.add_argument("--task", type=str, default="TeleAssist-Mug-Plate-Franka-IK-Rel-RGBD")
 parser.add_argument("--sensitivity", type=float, default=1.0)
 parser.add_argument(
     "--disable_external_cameras",
@@ -187,13 +187,32 @@ def main() -> None:
             flush=True,
         )
 
+        def _seat_mug_after_mesh_ready() -> None:
+            # Reset-time USD bounds are often empty; seat once meshes have extents,
+            # then let PhysX settle while re-zeroing velocity so it doesn't bounce up.
+            import torch
+            from teleassist.envs.events import seat_rigid_on_table
+
+            env_ids = torch.arange(env.num_envs, device=env.device)
+            mug = env.scene["mug"]
+            for _ in range(6):
+                env.sim.render()
+            for _ in range(8):
+                seat_rigid_on_table(env, env_ids, surface_z=0.0, clearance=-0.001)
+                for _ in range(4):
+                    env.sim.step(render=False)
+                mug.write_root_velocity_to_sim_index(
+                    root_velocity=torch.zeros(env.num_envs, 6, device=env.device),
+                    env_ids=env_ids,
+                )
+            env.sim.render()
+
         env.reset()
         teleop_interface.reset()
+        _seat_mug_after_mesh_ready()
 
         # Open panels after the env/UI exist. Prefer Kit image windows; OpenCV fallback.
         if not args_cli.disable_external_cameras:
-            for _ in range(4):
-                env.sim.render()
             try:
                 view = TableCameraWindows(
                     resolution=(
@@ -224,6 +243,7 @@ def main() -> None:
                     if state.should_reset:
                         env.reset()
                         teleop_interface.reset()
+                        _seat_mug_after_mesh_ready()
                         state.should_reset = False
                         state.should_rescan = True
                         print("[TeleAssist] environment reset complete", flush=True)
