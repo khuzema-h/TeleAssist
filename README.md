@@ -2,9 +2,9 @@
 
 **A perception-guided Cartesian teleoperation assistant for a Franka arm in Isaac Lab**
 
-<video src="teleassist/assets/teleassist_demo.mp4" controls width="720" title="TeleAssist orientation-snap demo">
-  <a href="teleassist/assets/teleassist_demo.mp4">Demo video</a> — orientation snap toward the mug grasp region during SE(3) teleop.
-</video>
+![TeleAssist orientation-snap demo](teleassist/assets/teleassist_demo.gif)
+
+[Full demo (WebM)](teleassist/assets/teleassist_demo.webm) — orientation snap toward the mug grasp region during SE(3) teleop.
 
 ## Abstract
 
